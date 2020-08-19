@@ -1,0 +1,187 @@
+from math import *
+from numpy import *
+import sys
+
+filename = 'C:/Users/user_name/Documents/file_name.stl'
+function = "(sin(t*3)*(1-cos(r/4*2*pi))+2)"
+
+
+def main():
+    # -----------------------------------------------------------------------------------------------------------
+    create_stl(50, 25, 150)     # 50 mm, 25 mm, resolution 150
+
+
+def create_stl(length, width, resolution):
+    points = []
+    triangles = []
+    x_max = 4
+    x_min = -4
+    y_max = 4
+    y_min = - 4
+    z_min = 0
+    x_size = length    # 100 mm
+    y_size = width     # mm
+    # --------- writing file mode ------------
+    use_file = True
+    stl_mode = True
+
+    x_step = (x_max - x_min) / (resolution - 1)
+    y_step = (y_max - y_min) / (resolution - 1)
+    X = array(range(resolution)) * x_step + x_min
+    Y = array(range(resolution)) * y_step + y_min
+    sys.stderr.write(str((len(X), len(Y))))
+
+    x_scalar = x_size / (x_max - x_min)
+    y_scalar = y_size / (y_max - y_min)
+    z_scalar = 0.5 * (x_scalar + y_scalar)
+
+    for i, x in enumerate(X):
+        for j, y in enumerate(Y):
+            points.append(array([x * x_scalar, y * y_scalar, z_scalar * max(0, -z_min + evaluate(x, y, function))]))
+            if i > 0 and j > 0:
+                p1 = i + j * resolution
+                p2 = p1 - 1
+                p3 = p1 - resolution
+                p4 = p3 - 1
+                triangles.append([p1, p2, p4])
+                triangles.append([p1, p4, p3])
+
+    x_step = x_size / (resolution - 1)
+    y_step = y_size / (resolution - 1)
+    X = array(range(resolution)) * x_step - x_size / 2
+    Y = array(range(resolution)) * y_step - y_size / 2
+
+    for i, x in enumerate(X):
+        points.append([x, -y_size / 2., 0])
+        if i > 0:
+            p1 = i * resolution
+            p2 = p1 - resolution
+            p3 = resolution ** 2 + i
+            p4 = p3 - 1
+            triangles.append([p1, p4, p2])
+            triangles.append([p1, p3, p4])
+
+    for i, x in enumerate(X):
+        points.append([x, y_size / 2., 0])
+        if i > 0:
+            p1 = i * resolution + resolution - 1
+            p2 = p1 - resolution
+            p3 = resolution ** 2 + resolution + i
+            p4 = p3 - 1
+            triangles.append([p1, p2, p4])
+            triangles.append([p1, p4, p3])
+
+    for j, y in enumerate(Y):
+        points.append([-x_size / 2., y, 0])
+        if j > 0:
+            p1 = j
+            p2 = p1 - 1
+            p3 = resolution ** 2 + 2 * resolution + j
+            p4 = p3 - 1
+            triangles.append([p1, p2, p4])
+            triangles.append([p1, p4, p3])
+
+    for j, y in enumerate(Y):
+        points.append([x_size / 2., y, 0])
+        if j > 0:
+            p1 = resolution ** 2 - resolution + j
+            p2 = p1 - 1
+            p3 = resolution ** 2 + 3 * resolution + j
+            p4 = p3 - 1
+            triangles.append([p1, p4, p2])
+            triangles.append([p1, p3, p4])
+
+    points += map(array,
+                  [[0, 0, 0], [-x_size / 2., -y_size / 2., 0], [x_size / 2., -y_size / 2., 0],
+                   [x_size / 2., y_size / 2., 0],
+                   [-x_size / 2.0, y_size / 2.0, 0]])
+
+    triangles.append(list(array([0, 1, 2]) + 4 * resolution + resolution ** 2))
+    triangles.append(list(array([0, 2, 3]) + 4 * resolution + resolution ** 2))
+    triangles.append(list(array([0, 3, 4]) + 4 * resolution + resolution ** 2))
+    triangles.append(list(array([0, 4, 1]) + 4 * resolution + resolution ** 2))
+
+    data = ''
+    if stl_mode:
+        '''
+        solid name
+        facet normal ni nj nk
+          outer loop
+            vertex v1x v1y v1z
+            vertex v2x v2y v2z
+            vertex v3x v3y v3z
+          endloop
+        endfacet
+        endsolid name
+        '''
+        import time
+
+        t = time.localtime()
+        name = 'object%s%s%s%s%s%s' % (t.tm_year, t.tm_mon, t.tm_mday, t.tm_hour, t.tm_min, t.tm_sec)
+        data += 'solid %s\n' % name
+        for facet in triangles:
+            # try:
+            p = [array(points[f]) for f in facet]
+            # except IndexError:
+            # sys.stderr.write(str(facet)+"\n")
+            # point=unit(cross(p[1]-p[0],p[2]-p[0]))
+            # point=unit(cross(p[0]-p[2],p[2]-p[1]))
+            point = [0, 0, 0]
+            data += 'facet normal %s\n' % ' '.join(map(str, point))
+            data += '  outer loop\n'
+            # if inward_wall:
+            p = [p[0], p[2], p[1]]
+            for point in p:
+                data += '    vertex %s\n' % ' '.join(map(str, point))
+            data += '  endloop\n'
+            data += 'endfacet\n'
+        data += 'endsolid %s\n' % name
+    else:
+        def tos(f):
+            return f
+
+        def map_tos(a):
+            return '[' + ','.join(map(tos, a)) + ']'
+
+        def map_map_tos(a):
+            return '[' + ','.join(map(map_tos, a)) + ']'
+
+        data = "polyhedron(\n points=\n%s,\n triangles\n=%s);" % (map_map_tos(points), triangles)
+
+    if use_file:
+        f = open(filename, "w")
+        f.write(data)
+        f.close()
+    else:
+        print(data)
+
+
+def poly(theta, n=4, r=10):
+    theta = (int(theta * 180 / pi) % (360 / n)) * pi / 180
+    theta = theta - 0.5 * (360 / n) * pi / 180
+    if theta < -pi / 2:
+        theta = -pi / 2
+    if theta > pi / 2:
+        theta = pi / 2
+    x = r / (0.001 + cos(theta))
+    return x
+
+
+def evaluate(x, y, func):
+    r = sqrt(x * x + y * y)
+    t = atan2(y, x)
+    theta = t
+    return eval(func)
+
+
+def mag(a):
+    return sqrt(sum(a * a))
+
+
+def unit(a):
+    return a / mag(a)
+
+
+# ---------------------------------------------------------------------------------------------------------------
+if __name__ == '__main__':
+    main()
